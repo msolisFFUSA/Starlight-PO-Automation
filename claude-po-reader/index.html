@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Starlight PO Reader</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#f1f6f2;color:#163324;font:16px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}main{max-width:980px;margin:48px auto;padding:0 20px}h1{margin:0;font-size:2.3rem;letter-spacing:-.04em}.lead,.status,.notice{color:#597064}.drop{margin:28px 0 16px;min-height:150px;display:grid;place-items:center;text-align:center;border:2px dashed #8bb99e;border-radius:16px;background:white;cursor:pointer}.drop.active{border-color:#137a4a;background:#f4fbf6}.drop b{display:block;font-size:1.1rem}.status{min-height:28px}.card{overflow:hidden;margin-top:10px;border:1px solid #d7e4db;border-radius:14px;background:white}.summary{display:flex;justify-content:space-between;padding:18px 22px;background:#f4faf6}.summary small{display:block;color:#597064}.summary strong{font-size:1.25rem}table{width:100%;border-collapse:collapse}th,td{padding:12px 22px;border-top:1px solid #dfe9e3;text-align:left}th{color:#597064;font-size:.75rem;text-transform:uppercase;letter-spacing:.08em}td:last-child,th:last-child{text-align:right}.notice{margin-top:15px;font-size:.9rem}input{display:none}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Purchase Order Reader</h1>
+    <p class="lead">Future Frame format — extracts the item description inside parentheses and the total quantity.</p>
+    <label class="drop" id="zone" for="file"><div><b>Drop a purchase-order PDF here</b><span>or click to choose a PDF</span></div></label>
+    <input id="file" type="file" accept="application/pdf,.pdf">
+    <div class="status" id="status">Drop a Future Frame purchase order to read only that PDF.</div>
+    <section class="card" id="results" hidden></section>
+    <p class="notice">Each drop clears the prior result. Only rows with an explicit parenthetical description and nearby Total quantity are shown; unclear rows are excluded instead of guessed.</p>
+  </main>
+  <script>
+    const zone=document.querySelector('#zone'),file=document.querySelector('#file'),status=document.querySelector('#status'),results=document.querySelector('#results');
+    for(const event of ['dragenter','dragover'])zone.addEventListener(event,e=>{e.preventDefault();zone.classList.add('active')});
+    for(const event of ['dragleave','drop'])zone.addEventListener(event,e=>{e.preventDefault();zone.classList.remove('active')});
+    zone.addEventListener('drop',e=>read(e.dataTransfer.files[0]));file.addEventListener('change',e=>read(e.target.files[0]));
+    function esc(value){return String(value).replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]))}
+    async function read(pdf){
+      results.hidden=true;
+      if(!pdf||!/\.pdf$/i.test(pdf.name)){status.textContent='Please choose a PDF.';return}
+      status.textContent='Reading '+pdf.name+'...';
+      try{const response=await fetch('/api/parse',{method:'POST',headers:{'Content-Type':'application/pdf'},body:pdf});const data=await response.json();if(!response.ok)throw Error(data.error||'Could not read this PDF.');render(data,pdf.name)}catch(error){status.textContent='Could not read this PDF: '+error.message}
+    }
+    function render(data,name){
+      const items=data.items||[],total=Number(data.totalQuantity||0);
+      status.textContent=`Finished reading ${name}: ${items.length} confirmed item${items.length===1?'':'s'}, ${total} total units.`;
+      results.innerHTML=`<div class="summary"><div><small>Confirmed items</small><strong>${items.length}</strong></div><div><small>Total quantity</small><strong>${total}</strong></div></div>${items.length?`<table><thead><tr><th>Item description (parentheses)</th><th>Page</th><th>Quantity</th></tr></thead><tbody>${items.map(item=>`<tr><td>${esc(item.description)}</td><td>${item.page}</td><td><b>${item.quantity}</b></td></tr>`).join('')}</tbody></table>`:'<p class="notice">No explicit item rows and totals were recognized. Try a clearer PDF.</p>'}`;
+      results.hidden=false;
+    }
+  </script>
+</body>
+</html>
